@@ -302,20 +302,36 @@ const updateUser = action(async (userId: string, updates: Partial<User>) => {
 }, 'updateUser').extend(withAsync())
 
 updateUser.subscribe(({ promise, params }) => {
-  const [userId, updates] = params
-  const currentList = userList()
+    const [userId, updates] = params;
 
-  // Optimistic update
-  const optimisticList = currentList.map((user) =>
-    user.id === userId ? { ...user, ...updates } : user,
-  )
-  userList.set(optimisticList)
+    const currentList = userList();
 
-  // Rollback on error
-  promise.catch(() => {
-    userList.set(currentList)
-  })
-})
+    const originalUserData = currentList.find((user) => user.id === userId);
+
+    if (!originalUserData) return;
+
+    const newUserData = { ...originalUserData, ...updates };
+
+    // Optimistic update
+    const optimisticList = currentList.map((user) =>
+        user.id === userId ? newUserData : user
+    );
+
+    userList.set(optimisticList);
+
+    // Rollback on error
+    promise.catch(() => {
+        const currentUserData = userList().find((user) => user.id === userId);
+
+        // If user deleted or was changed do nothing
+        if (!user || currentUserData !== newUserData) return;
+
+        // Replace to original userData
+        userList.set((prev) =>
+            prev.map((user) => (user.id === userId ? originalUserData : user))
+        );
+    });
+});
 ```
 
 ### Manual Abort Control
